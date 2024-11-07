@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NavigableSet;
 import java.util.SortedSet;
 import java.util.function.BiFunction;
@@ -20,6 +21,8 @@ public class SkipListSet<E>
 
     // TODO: подумать, как считать размер (случай с равенством) и как удалять верхние уровни
 
+    // NOTE: even ArrayList implementation has this warning suppression
+    @SuppressWarnings("unchecked")
     public SkipListSet() {
         comparator = null;
         compareComparable = (o, o2) -> ((Comparable<E>) o).compareTo(o2);
@@ -76,60 +79,90 @@ public class SkipListSet<E>
 
     private void put(E e, BiFunction<? super E, ? super E, Integer> cmp) {
         if (cmp.apply(e, head.value) < 0) {
-            var pathToLowerLevel = new ArrayList<Entry<E>>();
+            var pathToLowestLevel = new ArrayList<Entry<E>>();
             var currentLevelHead = head;
             do {
-                pathToLowerLevel.add(currentLevelHead);
+                pathToLowestLevel.add(currentLevelHead);
                 currentLevelHead = currentLevelHead.down;
             } while (currentLevelHead != null);
 
             Entry<E> previous = null;
-            for (int i = pathToLowerLevel.size() - 1; i >= 0; i--) {
+            for (int i = pathToLowestLevel.size() - 1; i >= 0; i--) {
                 var newHead = Entry.<E>builder()
-                        .height(pathToLowerLevel.get(i).height)
+                        .height(pathToLowestLevel.get(i).height)
                         .value(e)
-                        .next(pathToLowerLevel.get(i))
+                        .next(pathToLowestLevel.get(i))
                         .down(previous)
                         .build();
                 previous = newHead;
                 head = newHead;
             }
+            size++;
             return;
         }
 
         // construct path to lower level and find place for the new entry
-        var previousEntry = head;
-        var entryToCompare = head.next;
-        var pathToLowerLevel = new ArrayList<Entry<E>>();
-        while (previousEntry.height != 1) {
-            while (entryToCompare != null && cmp.apply(e, entryToCompare.value) > 0) {
-                var tmp = entryToCompare;
-                entryToCompare = entryToCompare.next;
-                previousEntry = tmp;
-            }
-            pathToLowerLevel.add(previousEntry);
-            previousEntry = previousEntry.down;
-            entryToCompare = previousEntry.next;
+        var pathToLowestLevel = buildPathToLowestLevel(e, cmp);
+
+        if (pathToLowestLevel.isEmpty()) {
+            return;
         }
+
+        var previousEntry = pathToLowestLevel.getLast();
 
         var pushedEntry = Entry.<E>builder()
                 .height(previousEntry.height) // 1 in this context
                 .value(e)
-                .next(entryToCompare)
+                .next(previousEntry.next)
                 .down(null)
                 .build();
         previousEntry.next = pushedEntry;
 
         // push entry up by flipping the dice
-        int i = pathToLowerLevel.size() - 2;
+        int i = pathToLowestLevel.size() - 2;
         while (Math.random() < PROBABILITY && head.height < MAX_DEPTH) {
             if (i < 0) {
                 pushedEntry = pushEntryIntoUpperLevel(pushedEntry, null);
             }
             else {
-                pushedEntry = pushEntryIntoUpperLevel(pushedEntry, pathToLowerLevel.get(i--));
+                pushedEntry = pushEntryIntoUpperLevel(pushedEntry, pathToLowestLevel.get(i--));
             }
         }
+        size++;
+    }
+
+    //TODO: подумать, как обработать случай, если e < head или e == head
+    /**
+     * Returns empty List if found entry with the same value
+     */
+    //TODO: надо делать полный путь, даже, если мы попали в таргет, тогда можно сравнить последний элемент пути и определить,
+    // что мы действительно попали в таргет.
+    private List<Entry<E>> buildPathToLowestLevel(E e, BiFunction<? super E, ? super E, Integer> cmp) {
+        var preTest = cmp.apply(e, head.value);
+        if (preTest < 0) {
+            return null;
+        }
+        else if (preTest == 0) {
+            return List.of();
+        }
+        var previousEntry = head;
+        var entryToCompare = head.next;
+        var pathToLowestLevel = new ArrayList<Entry<E>>();
+        while (previousEntry.height != 1) {
+            int compareResult;
+            while (entryToCompare != null && (compareResult = cmp.apply(e, entryToCompare.value)) >= 0) {
+                if (compareResult == 0) {
+                    return List.of();
+                }
+                var tmp = entryToCompare;
+                entryToCompare = entryToCompare.next;
+                previousEntry = tmp;
+            }
+            pathToLowestLevel.add(previousEntry);
+            previousEntry = previousEntry.down;
+            entryToCompare = previousEntry.next;
+        }
+        return pathToLowestLevel;
     }
 
     // if entry is not head ->
@@ -157,19 +190,37 @@ public class SkipListSet<E>
         return newEntry;
     }
 
-    @Override
-    public boolean isEmpty() {
-        return false;
+    private List<Entry<E>> getPathToLowestLevelSimple(E value) {
+        var pathToLowestLevel = List.<Entry<E>>of();
+        if (comparator != null) {
+            pathToLowestLevel = buildPathToLowestLevel(value, compareByComparator);
+        }
+        else {
+            if (!(value instanceof Comparable)) {
+                throw new IllegalArgumentException("Object must be comparable");
+            }
+            pathToLowestLevel = buildPathToLowestLevel(value, compareComparable);
+        }
+        return pathToLowestLevel;
     }
 
     @Override
+    public boolean isEmpty() {
+        return size == 0;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
     public boolean contains(Object o) {
-        return false;
+        var pathToLowestLevel = getPathToLowestLevelSimple((E) o);
+        return pathToLowestLevel != null && pathToLowestLevel.isEmpty();
     }
 
     @Override
     public boolean add(E e) {
-        return false;
+        var sizeSnapshot = size;
+        put(e);
+        return sizeSnapshot != size;
     }
 
     @Override
@@ -179,7 +230,11 @@ public class SkipListSet<E>
 
     @Override
     public E lower(E e) {
-        return null;
+        var pathToLowestLevel = getPathToLowestLevelSimple(e);
+        if (pathToLowestLevel == null) {
+            return null;
+        }
+        return pathToLowestLevel.getLast().value;
     }
 
     @Override
