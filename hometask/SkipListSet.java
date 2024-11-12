@@ -104,6 +104,7 @@ public class SkipListSet<E>
         // construct path to lower level and find place for the new entry
         var pathToLowestLevel = buildPathToLowestLevel(e, cmp);
 
+        assert pathToLowestLevel != null;
         if (pathToLowestLevel.isEmpty()) {
             return;
         }
@@ -134,6 +135,8 @@ public class SkipListSet<E>
     //TODO: подумать, как обработать случай, если e < head или e == head
     /**
      * Returns empty List if found entry with the same value
+     * Returns null if not found less then head
+     * Returns path to correct place at the lowest level
      */
     //TODO: надо делать полный путь, даже, если мы попали в таргет, тогда можно сравнить последний элемент пути и определить,
     // что мы действительно попали в таргет.
@@ -190,6 +193,7 @@ public class SkipListSet<E>
         return newEntry;
     }
 
+    // TODO: перенести выбор bifunction в 1 место
     private List<Entry<E>> getPathToLowestLevelSimple(E value) {
         var pathToLowestLevel = List.<Entry<E>>of();
         if (comparator != null) {
@@ -228,6 +232,7 @@ public class SkipListSet<E>
         return false;
     }
 
+    //TODO: подумать, как обработать случай с попаданием в существующий элемент
     @Override
     public E lower(E e) {
         var pathToLowestLevel = getPathToLowestLevelSimple(e);
@@ -239,7 +244,14 @@ public class SkipListSet<E>
 
     @Override
     public E floor(E e) {
-        return null;
+        var pathToLowestLevel = getPathToLowestLevelSimple(e);
+        if (pathToLowestLevel == null) {
+            return null;
+        }
+        if (pathToLowestLevel.isEmpty()) {
+            return e;
+        }
+        return pathToLowestLevel.getLast().value;
     }
 
     @Override
@@ -257,11 +269,13 @@ public class SkipListSet<E>
         return null;
     }
 
+    // TODO: завести указатель на последний элемент
     @Override
     public E pollLast() {
         return null;
     }
 
+    // TODO: для скорости можно держать указатель на голову нижнего уровня либо спускаться вниз
     @Override
     public Iterator<E> iterator() {
         return null;
@@ -294,7 +308,7 @@ public class SkipListSet<E>
 
     @Override
     public Comparator<? super E> comparator() {
-        return null;
+        return comparator;
     }
 
     @Override
@@ -314,7 +328,7 @@ public class SkipListSet<E>
 
     @Override
     public E first() {
-        return null;
+        return head.value;
     }
 
     @Override
@@ -324,7 +338,7 @@ public class SkipListSet<E>
 
     @Override
     public int size() {
-        return 0;
+        return size;
     }
 
     private static class Entry<E> {
