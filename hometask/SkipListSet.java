@@ -157,6 +157,7 @@ public class SkipListSet<E>
         return put(e);
     }
 
+    // TODO: надо ли чистить верхние уровни
     @SuppressWarnings("unchecked")
     @Override
     public boolean remove(Object o) {
@@ -164,6 +165,9 @@ public class SkipListSet<E>
     }
 
     private boolean removeElement(E e) {
+        if (e == null) {
+            return false;
+        }
         var pathToLowestLevel = buildPathToLowestLevel(e);
         var prev = pathToLowestLevel.poll();
         assert prev != null;
@@ -185,55 +189,93 @@ public class SkipListSet<E>
     //TODO: подумать, как обработать случай с попаданием в существующий элемент
     @Override
     public E lower(E e) {
-        var pathToLowestLevel = buildPathToLowestLevel(e);
-        if (pathToLowestLevel == null) {
-            return null;
-        }
-        return pathToLowestLevel.getLast().value;
+        var lowestPrevElem = buildPathToLowestLevel(e).poll();
+
+        return Optional.ofNullable(lowestPrevElem)
+                .map(Entry::getValue)
+                .orElse(null);
     }
 
     @Override
     public E floor(E e) {
-        var pathToLowestLevel = buildPathToLowestLevel(e);
-        if (pathToLowestLevel == null) {
-            return null;
-        }
-        if (pathToLowestLevel.isEmpty()) {
-            return e;
-        }
-        return pathToLowestLevel.getLast().value;
+        var lowestPrevElem = buildPathToLowestLevel(e).poll();
+
+        return Optional.ofNullable(lowestPrevElem)
+                .map(entry -> checkNextIsEqual(entry, e) ? entry.next : entry)
+                .map(Entry::getValue)
+                .orElse(null);
     }
 
     @Override
     public E ceiling(E e) {
-        return null;
+        var lowestPrevElem = buildPathToLowestLevel(e).poll();
+
+        return Optional.ofNullable(lowestPrevElem)
+                .map(entry -> checkNextIsEqual(entry, e) ? entry.next.next : entry.next)
+                .map(Entry::getValue)
+                .orElse(null);
     }
 
     @Override
     public E higher(E e) {
-        return null;
+        var lowestPrevElem = buildPathToLowestLevel(e).poll();
+
+        return Optional.ofNullable(lowestPrevElem)
+                .map(Entry::getNext)
+                .map(Entry::getValue)
+                .orElse(null);
     }
 
     @Override
     public E pollFirst() {
-        return null;
+        var lowestHead = getTheLowestHead();
+
+        var valueToRemove = head.next.value;
+
+        return size != 0
+                ? removeElement(lowestHead.next.value)
+                        ? valueToRemove
+                        : null
+                : null;
     }
 
-    // TODO: завести указатель на последний элемент
+    private Entry<E> getTheLowestHead() {
+        var lowestHead = head;
+        while (lowestHead.height > 1) {
+            lowestHead = lowestHead.down;
+        }
+        return lowestHead;
+    }
+
+    private Entry<E> getHighestElement() {
+        var iter = head;
+        while (true) {
+            while (iter.next != null) {
+                iter = iter.next;
+            }
+            if (iter.height == 1) {
+                return iter;
+            }
+            iter = iter.down;
+        }
+    }
+
     @Override
     public E pollLast() {
-        return null;
+        if (size == 0) {
+            return null;
+        }
+        var highestEntry = getHighestElement();
+        removeElement(highestEntry.value);
+        return highestEntry.value;
     }
 
-    // TODO: для скорости можно держать указатель на голову нижнего уровня либо спускаться вниз
     @Override
     public Iterator<E> iterator() {
         var set = this;
         return new Iterator<>() {
             private final SkipListSet<E> s = set;
-            private Entry<E> current = Entry.<E>builder()
-                    .next(head)
-                    .build();
+            private Entry<E> current = getTheLowestHead();
 
             @Override
             public boolean hasNext() {
@@ -242,6 +284,9 @@ public class SkipListSet<E>
 
             @Override
             public E next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
                 return (current = current.next).value;
             }
 
@@ -304,17 +349,144 @@ public class SkipListSet<E>
 
     @Override
     public E first() {
-        return head.value;
+        if (size == 0) {
+            throw new NoSuchElementException();
+        }
+        return getTheLowestHead().next.value;
     }
 
     @Override
     public E last() {
-        return null;
+        if (size == 0) {
+            throw new NoSuchElementException();
+        }
+
+        return getHighestElement().value;
     }
 
     @Override
     public int size() {
         return size;
+    }
+
+    @Override
+    public void clear() {
+        head = Entry.<E>builder().height(1).build();
+        size = 0;
+    }
+
+//    private static class DescendingSubSet<E> extends NavigableSubSet<E> {
+//
+//    }
+
+    private static class NavigableSubSet<E> extends AbstractSet<E>
+        implements NavigableSet<E> {
+        SkipListSet<E> skipListSet;
+        E from;
+        E to;
+//        DescendingSubSet<E> descendingSubSetView;
+
+        public NavigableSubSet(SkipListSet<E> skipListSet,
+                               E from, E to) {
+            this.skipListSet = skipListSet;
+            this.from = from;
+            this.to = to;
+        }
+
+        @Override
+        public E lower(E e) {
+            return null;
+        }
+
+        @Override
+        public E floor(E e) {
+            return null;
+        }
+
+        @Override
+        public E ceiling(E e) {
+            return null;
+        }
+
+        @Override
+        public E higher(E e) {
+            return null;
+        }
+
+        @Override
+        public E pollFirst() {
+            return null;
+        }
+
+        @Override
+        public E pollLast() {
+            return null;
+        }
+
+        @Override
+        public Iterator<E> iterator() {
+            return null;
+        }
+
+        @Override
+        public NavigableSet<E> descendingSet() {
+            return null;
+        }
+
+        @Override
+        public Iterator<E> descendingIterator() {
+            return null;
+        }
+
+        @Override
+        public NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
+            return null;
+        }
+
+        @Override
+        public NavigableSet<E> headSet(E toElement, boolean inclusive) {
+            return null;
+        }
+
+        @Override
+        public NavigableSet<E> tailSet(E fromElement, boolean inclusive) {
+            return null;
+        }
+
+        @Override
+        public Comparator<? super E> comparator() {
+            return null;
+        }
+
+        @Override
+        public SortedSet<E> subSet(E fromElement, E toElement) {
+            return null;
+        }
+
+        @Override
+        public SortedSet<E> headSet(E toElement) {
+            return null;
+        }
+
+        @Override
+        public SortedSet<E> tailSet(E fromElement) {
+            return null;
+        }
+
+        @Override
+        public E first() {
+            return null;
+        }
+
+        @Override
+        public E last() {
+            return null;
+        }
+
+        @Override
+        public int size() {
+            return 0;
+        }
     }
 
     private static class Entry<E> {

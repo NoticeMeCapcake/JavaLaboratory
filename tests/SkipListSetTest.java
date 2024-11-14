@@ -3,6 +3,7 @@ import org.junit.Test;
 import org.junit.jupiter.api.BeforeEach;
 
 import java.util.Comparator;
+import java.util.TreeSet;
 
 import static org.junit.Assert.*;
 
@@ -136,5 +137,80 @@ public class SkipListSetTest {
         assertTrue(set.remove(16));
         assertEquals(2, set.size());
         System.out.println(set);
+    }
+
+    @Test
+    public void testIterator() {
+        setUp();
+        for (var elem : set) {
+            System.out.println(elem);
+        }
+        var iter = set.iterator();
+        iter.next();
+        iter.next();
+    }
+
+    @Test
+    public void playground() {
+        setUp();
+        assertEquals(Integer.valueOf(7), set.first());
+        assertEquals(Integer.valueOf(16), set.last());
+        assertEquals(Integer.valueOf(7), set.pollFirst());
+        System.out.println(set);
+        assertEquals(Integer.valueOf(16), set.pollLast());
+        System.out.println(set);
+    }
+
+    @Test
+    public void playground2() {
+        var set = new TreeSet<Integer>();
+        set.add(1);
+        set.add(2);
+        set.add(3);
+//        set.add();
+        set.add(5);
+        set.add(6);
+        var subset = set.subSet(2, 6);
+        System.out.println(subset);
+        subset.add(4);
+        System.out.println(subset);
+        subset.remove(4);
+        System.out.println(subset);
+        subset.remove(1);
+        System.out.println(subset);
+        System.out.println(set);
+
+    }
+    @Test
+    public void playground3() {
+        var set = new TreeSet<Integer>();
+        set.add(1);
+        set.add(2);
+        set.add(3);
+//        set.add();
+        set.add(5);
+        set.add(6);
+        System.out.println(set);
+        var subset = set.descendingSet();
+        System.out.println(subset);
+        subset.add(4);
+        System.out.println(subset);
+        System.out.println(set);
+        subset.remove(4);
+        System.out.println(subset);
+        System.out.println(set);
+        var subSubSet = subset.subSet(6, 2);
+        System.out.println(subSubSet);
+        subSubSet.remove(5);
+        System.out.println(subSubSet);
+        System.out.println(subset);
+        System.out.println(set);
+//        System.out.println(subset);
+//        subset.remove(4);
+//        System.out.println(subset);
+//        subset.remove(1);
+//        System.out.println(subset);
+//        System.out.println(set);
+
     }
 }
