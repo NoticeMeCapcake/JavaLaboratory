@@ -11,8 +11,6 @@ public class SkipListSet<E>
     private final Comparator<? super E> cmp;
     private int size;
 
-    // TODO: подумать, как считать размер (случай с равенством) и как удалять верхние уровни
-
     // NOTE: even ArrayList implementation has this warning suppression
     @SuppressWarnings("unchecked")
     public SkipListSet() {
@@ -157,7 +155,6 @@ public class SkipListSet<E>
         return put(e);
     }
 
-    // TODO: надо ли чистить верхние уровни
     @SuppressWarnings("unchecked")
     @Override
     public boolean remove(Object o) {
@@ -186,7 +183,6 @@ public class SkipListSet<E>
         entry.next = entry.next.next;
     }
 
-    //TODO: подумать, как обработать случай с попаданием в существующий элемент
     @Override
     public E lower(E e) {
         var lowestPrevElem = buildPathToLowestLevel(e).poll();
@@ -230,10 +226,10 @@ public class SkipListSet<E>
     public E pollFirst() {
         var lowestHead = getTheLowestHead();
 
-        var valueToRemove = head.next.value;
+        var valueToRemove = lowestHead.next.value;
 
         return size != 0
-                ? removeElement(lowestHead.next.value)
+                ? removeElement(valueToRemove)
                         ? valueToRemove
                         : null
                 : null;
@@ -274,8 +270,9 @@ public class SkipListSet<E>
     public Iterator<E> iterator() {
         var set = this;
         return new Iterator<>() {
-            private final SkipListSet<E> s = set;
+            private final SkipListSet<E> s = SkipListSet.this;
             private Entry<E> current = getTheLowestHead();
+            private boolean removed = true;
 
             @Override
             public boolean hasNext() {
@@ -287,12 +284,17 @@ public class SkipListSet<E>
                 if (!hasNext()) {
                     throw new NoSuchElementException();
                 }
+                removed = false;
                 return (current = current.next).value;
             }
 
             @Override
             public void remove() {
+                if (removed) {
+                    throw new IllegalStateException();
+                }
                 s.remove(current.value);
+                removed = true;
             }
 
             @Override
@@ -314,17 +316,26 @@ public class SkipListSet<E>
 
     @Override
     public NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-        return null;
+        return new NavigableSubSet<>(this,
+                false, fromElement, fromInclusive,
+                false,toElement, toInclusive);
+    }
+
+    @Override
+    public SortedSet<E> subSet(E fromElement, E toElement) {
+        return subSet(fromElement, true, toElement, false);
     }
 
     @Override
     public NavigableSet<E> headSet(E toElement, boolean inclusive) {
-        return null;
+        return new NavigableSubSet<>(this, true, null, false,
+                false, toElement, inclusive);
     }
 
     @Override
     public NavigableSet<E> tailSet(E fromElement, boolean inclusive) {
-        return null;
+        return new NavigableSubSet<>(this, false, fromElement, inclusive,
+                true, null, false);
     }
 
     @Override
@@ -333,18 +344,13 @@ public class SkipListSet<E>
     }
 
     @Override
-    public SortedSet<E> subSet(E fromElement, E toElement) {
-        return null;
-    }
-
-    @Override
     public SortedSet<E> headSet(E toElement) {
-        return null;
+        return headSet(toElement, false);
     }
 
     @Override
     public SortedSet<E> tailSet(E fromElement) {
-        return null;
+        return tailSet(fromElement, true);
     }
 
     @Override
@@ -384,48 +390,181 @@ public class SkipListSet<E>
         SkipListSet<E> skipListSet;
         E from;
         E to;
+        Comparator<? super E> cmp;
+        boolean fromInclusive;
+        boolean toInclusive;
+        boolean fromStart;
+        boolean toEnd;
+
 //        DescendingSubSet<E> descendingSubSetView;
 
         public NavigableSubSet(SkipListSet<E> skipListSet,
-                               E from, E to) {
+                               boolean fromStart, E from, boolean fromInclusive,
+                               boolean toEnd, E to, boolean toInclusive) {
+            if (!fromStart && !toEnd) {
+                if (cpr(skipListSet.cmp, from, to) > 0)
+                    throw new IllegalArgumentException("fromKey > toKey");
+            } else {
+                if (!fromStart) // type check
+                    cpr(skipListSet.cmp, from, to);
+                if (!toEnd)
+                    cpr(skipListSet.cmp, from, to);
+            }
             this.skipListSet = skipListSet;
+            this.fromStart = fromStart;
             this.from = from;
+            this.fromInclusive = fromInclusive;
+            this.toEnd = toEnd;
             this.to = to;
+            this.toInclusive = toInclusive;
+            this.cmp = skipListSet.comparator();
+        }
+
+        @Override
+        public boolean add(E e) {
+            if (!checkItemInRange(e))
+                throw new IllegalArgumentException("key out of range");
+            return skipListSet.add(e);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public boolean contains(Object o) {
+            return checkItemInRange((E) o) && skipListSet.contains(o);
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return size() == 0;
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public boolean remove(Object o) {
+            return checkItemInRange((E) o) ? skipListSet.remove(o) : false;
         }
 
         @Override
         public E lower(E e) {
+            var lower = skipListSet.lower(e);
+            if (checkItemInRange(lower)) {
+                return lower;
+            }
+
             return null;
+        }
+
+        final boolean tooLow(Object key) {
+            if (!fromStart) {
+                int c = cpr(cmp, key, from);
+                return c < 0 || (c == 0 && !fromInclusive);
+            }
+            return false;
+        }
+
+        final boolean tooHigh(Object key) {
+            if (!toEnd) {
+                int c = cpr(cmp, key, to);
+                return c > 0 || (c == 0 && !toInclusive);
+            }
+            return false;
+        }
+
+        final boolean inRange(Object key) {
+            return !tooLow(key) && !tooHigh(key);
+        }
+
+        private boolean checkItemInRange(E item) {
+            if (item == null) {
+                return false;
+            }
+
+            return inRange(item);
         }
 
         @Override
         public E floor(E e) {
+            var floor = skipListSet.floor(e);
+            if (checkItemInRange(floor)) {
+                return floor;
+            }
+
             return null;
         }
 
         @Override
         public E ceiling(E e) {
+            var ceiling = skipListSet.ceiling(e);
+            if (checkItemInRange(ceiling)) {
+                return ceiling;
+            }
+
             return null;
         }
 
         @Override
         public E higher(E e) {
+            var higher = skipListSet.higher(e);
+            if (checkItemInRange(higher)) {
+                return higher;
+            }
+
             return null;
         }
 
         @Override
         public E pollFirst() {
+            var lowest = fromInclusive ? skipListSet.ceiling(from) : skipListSet.higher(from);
+            if (checkItemInRange(lowest)) {
+                skipListSet.remove(lowest);
+                return lowest;
+            }
+
             return null;
         }
 
         @Override
         public E pollLast() {
+            var highest = toInclusive ? skipListSet.floor(to) : skipListSet.lower(to);
+            if (checkItemInRange(highest)) {
+                skipListSet.remove(highest);
+                return highest;
+            }
+
             return null;
         }
 
         @Override
         public Iterator<E> iterator() {
-            return null;
+            return new Iterator<>() {
+                private final NavigableSet<E> s = NavigableSubSet.this;
+                private Entry<E> current = NavigableSubSet.this.skipListSet.buildPathToLowestLevel(from).poll();
+                private boolean removed = true;
+
+                @Override
+                public boolean hasNext() {
+                    return current.next != null && checkItemInRange(current.next.value);
+                }
+
+                @Override
+                public E next() {
+                    if (!hasNext()) {
+                        throw new NoSuchElementException();
+                    }
+
+                    removed = false;
+                    return (current = current.next).value;
+                }
+
+                @Override
+                public void remove() {
+                    if (removed) {
+                        throw new IllegalStateException();
+                    }
+                    s.remove(current.value);
+                    removed = true;
+                }
+            };
         }
 
         @Override
@@ -438,54 +577,121 @@ public class SkipListSet<E>
             return null;
         }
 
+        // TODO: вложенные подмножества должны учитывать границы чуть иначе
         @Override
         public NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-            return null;
-        }
-
-        @Override
-        public NavigableSet<E> headSet(E toElement, boolean inclusive) {
-            return null;
-        }
-
-        @Override
-        public NavigableSet<E> tailSet(E fromElement, boolean inclusive) {
-            return null;
-        }
-
-        @Override
-        public Comparator<? super E> comparator() {
-            return null;
+            if (!checkItemInRange(fromElement) || !checkItemInRange(toElement)) {
+                throw new IllegalArgumentException("bounds out of range");
+            }
+            return new NavigableSubSet<>(skipListSet, false, fromElement, fromInclusive, false, toElement, toInclusive);
         }
 
         @Override
         public SortedSet<E> subSet(E fromElement, E toElement) {
+            return subSet(fromElement, true, toElement, false);
+        }
+
+        @Override
+        public NavigableSet<E> headSet(E toElement, boolean inclusive) {
+            if (!checkItemInRange(toElement)) {
+                throw new IllegalArgumentException("toElement out of range");
+            }
             return null;
         }
 
         @Override
         public SortedSet<E> headSet(E toElement) {
+            return headSet(toElement, false);
+        }
+
+        @Override
+        public NavigableSet<E> tailSet(E fromElement, boolean inclusive) {
+            if (!checkItemInRange(fromElement)) {
+                throw new IllegalArgumentException("toElement out of range");
+            }
             return null;
         }
 
         @Override
         public SortedSet<E> tailSet(E fromElement) {
-            return null;
+            return tailSet(fromElement, true);
+        }
+
+        @Override
+        public Comparator<? super E> comparator() {
+            return cmp;
         }
 
         @Override
         public E first() {
-            return null;
+            var ceiling = ceiling(from);
+            if (ceiling == null) {
+                throw new NoSuchElementException();
+            }
+
+            return ceiling;
         }
 
         @Override
         public E last() {
-            return null;
+            var floor = floor(to);
+            if (floor == null) {
+                throw new NoSuchElementException();
+            }
+
+            return floor;
         }
 
         @Override
         public int size() {
-            return 0;
+            var lowest = skipListSet.buildPathToLowestLevel(from).poll();
+            var size = 0;
+            while (lowest != null && isBeforeEnd(lowest.getValue())) {
+                if (checkItemInRange(lowest.getValue())) {
+                    size++;
+                }
+
+                lowest = lowest.next;
+            }
+            return size;
+        }
+
+        private boolean isBeforeEnd(E e) {
+            if (e == null) {
+                return false;
+            }
+            return !tooHigh(e);
+        }
+
+        @Override
+        public void clear() {
+            var lowest = skipListSet.buildPathToLowestLevel(from).poll();
+            while (lowest != null && isBeforeEnd(lowest.getValue())) {
+                if (checkItemInRange(lowest.getValue())) {
+                    skipListSet.remove(lowest.getValue());
+                }
+
+                lowest = lowest.next;
+            }
+        }
+
+        @Override
+        public String toString() {
+            var sb = new StringBuilder();
+            var currentLevelHead = skipListSet.head;
+            do {
+                Entry<E> currentEntry = currentLevelHead;
+                do {
+                    if (currentEntry.value == null || checkItemInRange(currentEntry.value)) {
+                        sb.append(currentEntry.value);
+                        sb.append(" -> ");
+                    }
+                    currentEntry = currentEntry.next;
+                } while (currentEntry != null);
+                sb.append(System.lineSeparator());
+                currentLevelHead = currentLevelHead.down;
+            } while (currentLevelHead != null);
+            return sb.toString();
         }
     }
 
