@@ -10,8 +10,6 @@ public class SkipListSet<E>
     private final Comparator<? super E> cmp;
     private int size;
 
-    // NOTE: even ArrayList implementation has this warning suppression
-    @SuppressWarnings("unchecked")
     public SkipListSet() {
         cmp = null;
         size = 0;
@@ -27,6 +25,7 @@ public class SkipListSet<E>
         putAll(c);
     }
 
+    // NOTE: even ArrayList implementation has this warning suppression
     @SuppressWarnings({"unchecked", "rawtypes"})
     static int cpr(Comparator c, Object x, Object y) {
         return (c != null) ? c.compare(x, y) : ((Comparable)x).compareTo(y);
@@ -267,7 +266,6 @@ public class SkipListSet<E>
 
     @Override
     public Iterator<E> iterator() {
-        var set = this;
         return new Iterator<>() {
             private final SkipListSet<E> s = SkipListSet.this;
             private Entry<E> current = getTheLowestHead();
