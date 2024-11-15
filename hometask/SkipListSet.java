@@ -1,5 +1,4 @@
 import java.util.*;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 public class SkipListSet<E>
@@ -406,9 +405,9 @@ public class SkipListSet<E>
                     throw new IllegalArgumentException("fromKey > toKey");
             } else {
                 if (!fromStart) // type check
-                    cpr(skipListSet.cmp, from, to);
+                    cpr(skipListSet.cmp, from, from);
                 if (!toEnd)
-                    cpr(skipListSet.cmp, from, to);
+                    cpr(skipListSet.cmp, to, to);
             }
             this.skipListSet = skipListSet;
             this.fromStart = fromStart;
@@ -444,16 +443,6 @@ public class SkipListSet<E>
             return checkItemInRange((E) o) ? skipListSet.remove(o) : false;
         }
 
-        @Override
-        public E lower(E e) {
-            var lower = skipListSet.lower(e);
-            if (checkItemInRange(lower)) {
-                return lower;
-            }
-
-            return null;
-        }
-
         final boolean tooLow(Object key) {
             if (!fromStart) {
                 int c = cpr(cmp, key, from);
@@ -480,6 +469,16 @@ public class SkipListSet<E>
             }
 
             return inRange(item);
+        }
+
+        @Override
+        public E lower(E e) {
+            var lower = skipListSet.lower(e);
+            if (checkItemInRange(lower)) {
+                return lower;
+            }
+
+            return null;
         }
 
         @Override
@@ -514,31 +513,39 @@ public class SkipListSet<E>
 
         @Override
         public E pollFirst() {
-            var lowest = fromInclusive ? skipListSet.ceiling(from) : skipListSet.higher(from);
-            if (checkItemInRange(lowest)) {
-                skipListSet.remove(lowest);
-                return lowest;
+            if (!fromStart) {
+                var lowest = fromInclusive ? skipListSet.ceiling(from) : skipListSet.higher(from);
+                if (checkItemInRange(lowest)) {
+                    skipListSet.remove(lowest);
+                    return lowest;
+                }
+
+                return null;
             }
 
-            return null;
+            return skipListSet.pollFirst();
         }
 
         @Override
         public E pollLast() {
-            var highest = toInclusive ? skipListSet.floor(to) : skipListSet.lower(to);
-            if (checkItemInRange(highest)) {
-                skipListSet.remove(highest);
-                return highest;
+            if (!toEnd) {
+                var highest = toInclusive ? skipListSet.floor(to) : skipListSet.lower(to);
+                if (checkItemInRange(highest)) {
+                    skipListSet.remove(highest);
+                    return highest;
+                }
+
+                return null;
             }
 
-            return null;
+            return skipListSet.pollLast();
         }
 
         @Override
         public Iterator<E> iterator() {
             return new Iterator<>() {
                 private final NavigableSet<E> s = NavigableSubSet.this;
-                private Entry<E> current = NavigableSubSet.this.skipListSet.buildPathToLowestLevel(from).poll();
+                private Entry<E> current = getTheLowestHead();
                 private boolean removed = true;
 
                 @Override
@@ -649,7 +656,7 @@ public class SkipListSet<E>
 
         @Override
         public int size() {
-            var lowest = skipListSet.buildPathToLowestLevel(from).poll();
+            var lowest = getTheLowestHead().next;
             var size = 0;
             while (lowest != null && isBeforeEnd(lowest.getValue())) {
                 if (checkItemInRange(lowest.getValue())) {
@@ -668,9 +675,20 @@ public class SkipListSet<E>
             return !tooHigh(e);
         }
 
+        private Entry<E> getTheLowestHead() {
+            Entry<E> lowest;
+            if (fromStart) {
+                lowest = skipListSet.getTheLowestHead();
+            }
+            else {
+                lowest = skipListSet.buildPathToLowestLevel(from).poll();
+            }
+            return lowest;
+        }
+
         @Override
         public void clear() {
-            var lowest = skipListSet.buildPathToLowestLevel(from).poll();
+            var lowest = getTheLowestHead().next;
             while (lowest != null && isBeforeEnd(lowest.getValue())) {
                 if (checkItemInRange(lowest.getValue())) {
                     skipListSet.remove(lowest.getValue());

@@ -282,4 +282,37 @@ public class SkipListSetTest {
         assertEquals(3, subset.size());
         assertEquals(5, set.size());
     }
+
+    @Test
+    public void subSetTestIterator() {
+        setUp();
+        var subset = set.subSet(9, 15);
+        System.out.println(subset);
+        assertEquals(4, subset.size());
+        for (var elem : subset) {
+            System.out.println(elem);
+        }
+    }
+
+    @Test
+    public void tailSetTestIterator() {
+        setUp();
+        var subset = set.headSet( 13);
+        System.out.println(subset);
+        assertEquals(4, subset.size());
+        for (var elem : subset) {
+            System.out.println(elem);
+        }
+    }
+
+    @Test
+    public void headSetTestIterator() {
+        setUp();
+        var subset = set.tailSet( 11);
+        System.out.println(subset);
+        assertEquals(4, subset.size());
+        for (var elem : subset) {
+            System.out.println(elem);
+        }
+    }
 }
