@@ -577,13 +577,14 @@ public class SkipListSet<E>
             return null;
         }
 
-        // TODO: вложенные подмножества должны учитывать границы чуть иначе
         @Override
         public NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
             if (!checkItemInRange(fromElement) || !checkItemInRange(toElement)) {
                 throw new IllegalArgumentException("bounds out of range");
             }
-            return new NavigableSubSet<>(skipListSet, false, fromElement, fromInclusive, false, toElement, toInclusive);
+            return new NavigableSubSet<>(skipListSet,
+                    false, fromElement, fromInclusive,
+                    false, toElement, toInclusive);
         }
 
         @Override
@@ -596,7 +597,9 @@ public class SkipListSet<E>
             if (!checkItemInRange(toElement)) {
                 throw new IllegalArgumentException("toElement out of range");
             }
-            return null;
+            return new NavigableSubSet<>(skipListSet,
+                    true, null, false,
+                    false, toElement, inclusive);
         }
 
         @Override
@@ -609,7 +612,9 @@ public class SkipListSet<E>
             if (!checkItemInRange(fromElement)) {
                 throw new IllegalArgumentException("toElement out of range");
             }
-            return null;
+            return new NavigableSubSet<>(skipListSet,
+                    false, fromElement, inclusive,
+                    true, null, false);
         }
 
         @Override
